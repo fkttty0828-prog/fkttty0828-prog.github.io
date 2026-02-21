@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>合同文化祭プロジェクト ガントチャート</title>
+    <style>
+        :root {
+            --primary-color: #3498db;
+            --secondary-color: #2c3e50;
+            --accent-color: #e74c3c;
+            --bg-light: #f4f7f6;
+            --text-dark: #333;
+            --task-bar-bg: #2ecc71;
+            --task-bar-hover: #27ae60;
+        }
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-light);
+            color: var(--text-dark);
+            padding: 20px;
+            margin: 0;
+        }
+        h2 {
+            text-align: center;
+            color: var(--secondary-color);
+            margin-bottom: 30px;
+        }
+        .controls {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            margin-bottom: 25px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: flex-end;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+        }
+        .control-group label {
+            font-size: 12px;
+            margin-bottom: 5px;
+            color: #777;
+        }
+        input[type="text"], input[type="date"], select {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s, transform 0.1s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button:active {
+            transform: translateY(1px);
+        }
+        .btn-reset {
+            background-color: #95a5a6;
+        }
+        .btn-reset:hover {
+            background-color: #7f8c8d;
+        }
+        
+        /* ガントチャート表示エリア */
+        .gantt-container-wrapper {
+            position: relative; /* SVGの基準点 */
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            padding: 20px;
+            overflow-x: auto;
+        }
+        
+        /* 依存関係の矢印を描画するSVGレイヤー */
+        #dependency-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* 下の要素をクリックできるようにする */
+            z-index: 10;
+        }
+        .dependency-arrow {
+            stroke: #bdc3c7;
+            stroke-width: 2;
+            fill: none;
+            marker-end: url(#arrowhead);
+        }
+
+        table {
+            border-collapse: separate;
+            border-spacing: 0;
+            width: 100%;
+            min-width: 1200px;
+        }
+        th, td {
+            border-bottom: 1px solid #eee;
+            border-right: 1px solid #eee;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-size: 13px;
+            text-align: center;
+            font-weight: 600;
+            color: var(--secondary-color);
+            position: sticky;
+            top: 0;
+            z-index: 20;
+        }
+        th:first-child {
+            left: 0;
+            z-index: 21;
+            background-color: #f8f9fa;
+            border-right: 2px solid #ddd;
+        }
+        td:first-child {
+            position: sticky;
+            left: 0;
+            background-color: #fff;
+            z-index: 5;
+            border-right: 2px solid #ddd;
+        }
+        
+        .task-name-cell {
+            width: 250px;
+            min-width: 250px;
+            font-weight: 500;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .delete-btn {
+            background: var(--accent-color);
+            padding: 4px 8px;
+            font-size: 10px;
+            margin-left: 10px;
+            opacity: 0.6;
+        }
+        .delete-btn:hover {
+            background: #c0392b;
+            opacity: 1;
+        }
+        .timeline-cell {
+            position: relative;
+            padding: 0 !important;
+            height: 50px;
+            background-image: linear-gradient(to right, transparent 95%, #f9f9f9 95%);
+            background-size: 100% 100%; /* 日付ごとの縦線 */
+        }
+        .task-bar {
+            position: absolute;
+            top: 10px;
+            height: 30px;
+            background-color: var(--task-bar-bg);
+            border-radius: 15px;
+            color: white;
+            font-size: 12px;
+            line-height: 30px;
+            padding: 0 15px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 2;
+        }
+        .task-bar:hover {
+            background-color: var(--task-bar-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+
+    <h2>合同文化祭プロジェクト進捗管理</h2>
+
+    <div class="controls">
+        <div class="control-group">
+            <label for="taskName">タスク名</label>
+            <input type="text" id="taskName" placeholder="例：会場下見" required>
+        </div>
+        <div class="control-group">
+            <label for="startDate">開始日</label>
+            <input type="date" id="startDate" required>
+        </div>
+        <div class="control-group">
+            <label for="endDate">終了日</label>
+            <input type="date" id="endDate" required>
+        </div>
+        <div class="control-group">
+            <label for="dependency">先行タスク（任意）</label>
+            <select id="dependency">
+                <option value="">なし</option>
+            </select>
+        </div>
+        <button onclick="addTask()">タスクを追加</button>
+        <button onclick="resetData()" class="btn-reset">初期データに戻す</button>
+    </div>
+
+    <div class="gantt-container-wrapper">
+        <svg id="dependency-svg">
+            <defs>
+                <marker id="arrowhead" markerWidth="10" markerHeight="7" 
+                        refX="9" refY="3.5" orient="auto">
+                    <polygon points="0 0, 10 3.5, 0 7" fill="#bdc3c7" />
+                </marker>
+            </defs>
+            </svg>
+        <div id="ganttTableContainer">
+            </div>
+    </div>
+
+    <script>
+        // 画像から読み取った初期データ（日付は目安です）
+        const initialData = [
+            // 上段フロー
+            { id: 't1', name: 'チラシ作成（来場促進用）', start: '2024-05-01', end: '2024-05-31' },
+            { id: 't2', name: '教育委員会後援申請（チラシ配布分）', start: '2024-05-15', end: '2024-05-31', dependsOn: 't1' },
+            { id: 't3', name: '全小中学校へ配布（7月初）', start: '2024-07-01', end: '2024-07-10', dependsOn: 't2' },
+            // 中段メインフロー
+            { id: 't4', name: 'チラシ作成3月（出店募集分）', start: '2024-03-01', end: '2024-03-20' },
+            { id: 't5', name: '教育委員会への後援申請 3月', start: '2024-03-21', end: '2024-03-31', dependsOn: 't4' },
+            { id: 't6', name: 'チラシ4月初配布（中学校4校）', start: '2024-04-01', end: '2024-04-10', dependsOn: 't5' },
+            { id: 't7', name: '4月末募集締切・選定（6チーム）', start: '2024-04-11', end: '2024-04-30', dependsOn: 't6' },
+            { id: 't8', name: '5月各チームと打ち合わせ', start: '2024-05-07', end: '2024-05-25', dependsOn: 't7' },
+            { id: 't9', name: '準備作成期間（〜7/24）', start: '2024-05-26', end: '2024-07-24', dependsOn: 't8' },
+            // 左側フロー
+            { id: 't11', name: '街づくり助成金提出（2/27期限）', start: '2024-02-10', end: '2024-02-27' },
+            { id: 't12', name: '街づくり助成金発表（3/7 10時）', start: '2024-03-07', end: '2024-03-07', dependsOn: 't11' },
+            // その他単独・並行フロー
+            { id: 't13', name: '常滑東小学校駐車場確認', start: '2024-03-01', end: '2024-03-15' },
+            { id: 't16', name: 'キッチンカー募集（6月末迄）', start: '2024-05-01', end: '2024-06-30' },
+            { id: 't14', name: '法被デザイン・作成（幸田さん）', start: '2024-04-01', end: '2024-06-20' },
+            { id: 't15', name: '法被6月末完成', start: '2024-06-25', end: '2024-06-30', dependsOn: 't14' },
+            { id: 't17', name: '委員会ブース案出し', start: '2024-05-01', end: '2024-05-20' },
+            { id: 't18', name: '委員会ブース準備作成', start: '2024-05-21', end: '2024-07-20', dependsOn: 't17' },
+            // 最終ゴール
+            { id: 't10', name: '【当日】合同文化祭（10時〜15時）', start: '2024-07-25', end: '2024-07-25', dependsOn: 't9' }
+        ];
+
+        // ローカルストレージからデータを取得、なければ初期データを使用
+        let tasks = JSON.parse(localStorage.getItem('ganttTasks_v2')) || initialData;
+
+        function saveTasks() {
+            localStorage.setItem('ganttTasks_v2', JSON.stringify(tasks));
+            updateDependencySelect();
+        }
+
+        // 依存関係プルダウンの選択肢を更新する関数
+        function updateDependencySelect() {
+            const select = document.getElementById('dependency');
+            select.innerHTML = '<option value="">なし</option>';
+            tasks.forEach(task => {
+                const option = document.createElement('option');
+                option.value = task.id;
+                option.textContent = task.name;
+                select.appendChild(option);
+            });
+        }
+
+        function renderChart() {
+            const container = document.getElementById('ganttTableContainer');
+            const svgContainer = document.getElementById('dependency-svg');
+            container.innerHTML = '';
+            // 既存の矢印をクリア（defsは残す）
+            while (svgContainer.lastChild && svgContainer.lastChild.tagName !== 'defs') {
+                svgContainer.removeChild(svgContainer.lastChild);
+            }
+
+            if (tasks.length === 0) {
+                container.innerHTML = '<p style="text-align:center; padding:20px; color:#777;">タスクがありません。初期データに戻すか、新規追加してください。</p>';
+                return;
+            }
+
+            // 日付の範囲計算
+            let minDate = new Date(Math.min(...tasks.map(t => new Date(t.start))));
+            let maxDate = new Date(Math.max(...tasks.map(t => new Date(t.end))));
+            minDate.setDate(minDate.getDate() - 5); // 前後に余白
+            maxDate.setDate(maxDate.getDate() + 10);
+
+            const totalDays = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24)) + 1;
+            const dayWidthPercent = 100 / totalDays;
+
+            // テーブルヘッダー作成
+            let tableHTML = '<table><thead><tr><th style="width: 250px;">タスク名</th>';
+            let currentDate = new Date(minDate);
+            for (let i = 0; i < totalDays; i++) {
+                let dateStr = `${currentDate.getMonth()+1}/${currentDate.getDate()}`;
+                let cellStyle = '';
+                // 月曜日に区切り線を入れる
+                if (currentDate.getDay() === 1) cellStyle = 'border-left: 2px solid #ddd;';
+                
+                tableHTML += `<th style="${cellStyle}">${dateStr}</th>`;
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+            tableHTML += '</tr></thead><tbody>';
+
+            // タスク行の作成
+            tasks.forEach((task, index) => {
+                tableHTML += `<tr id="task-row-${task.id}">
+                    <td class="task-name-cell">
+                        <span>${task.name}</span>
+                        <button class="delete-btn" onclick="deleteTask('${task.id}')">削除</button>
+                    </td>`;
+                
+                tableHTML += `<td colspan="${totalDays}" class="timeline-cell">`;
+                
+                let taskStart = new Date(task.start);
+                let taskEnd = new Date(task.end);
+                let startOffsetDays = Math.floor((taskStart - minDate) / (1000 * 60 * 60 * 24));
+                let durationDays = Math.floor((taskEnd - taskStart) / (1000 * 60 * 60 * 24)) + 1;
+                
+                let leftPercent = startOffsetDays * dayWidthPercent;
+                let widthPercent = durationDays * dayWidthPercent;
+
+                tableHTML += `
+                    <div class="task-bar" id="bar-${task.id}"
+                         style="left: ${leftPercent}%; width: ${widthPercent}%;" 
+                         title="${task.name}&#013;期間: ${task.start} 〜 ${task.end}">
+                         ${task.name}
+                    </div>`;
+                
+                tableHTML += `</td></tr>`;
+            });
+            tableHTML += '</tbody></table>';
+            container.innerHTML = tableHTML;
+
+            // タスクバー配置後に依存関係の矢印を描画
+            setTimeout(drawDependencies, 100); // レンダリング完了を少し待つ
+        }
+
+        // 依存関係の矢印を描画する関数
+        function drawDependencies() {
+            const svgContainer = document.getElementById('dependency-svg');
+            const containerRect = document.querySelector('.gantt-container-wrapper').getBoundingClientRect();
+            
+            tasks.forEach(task => {
+                if (task.dependsOn) {
+                    const fromBar = document.getElementById(`bar-${task.dependsOn}`);
+                    const toBar = document.getElementById(`bar-${task.id}`);
+
+                    if (fromBar && toBar) {
+                        const fromRect = fromBar.getBoundingClientRect();
+                        const toRect = toBar.getBoundingClientRect();
+
+                        // SVG座標系における始点と終点の計算
+                        const startX = fromRect.right - containerRect.left + 2;
+                        const startY = fromRect.top - containerRect.top + fromRect.height / 2;
+                        const endX = toRect.left - containerRect.left - 2;
+                        const endY = toRect.top - containerRect.top + toRect.height / 2;
+
+                        // ベジェ曲線で矢印を描画
+                        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                        // 制御点を設定して滑らかな曲線にする
+                        const controlPointX1 = startX + 30;
+                        const controlPointX2 = endX - 30;
+                        const d = `M ${startX} ${startY} C ${controlPointX1} ${startY}, ${controlPointX2} ${endY}, ${endX} ${endY}`;
+                        
+                        path.setAttribute("d", d);
+                        path.classList.add("dependency-arrow");
+                        svgContainer.appendChild(path);
+                    }
+                }
+            });
+        }
+
+        function addTask() {
+            const name = document.getElementById('taskName').value;
+            const start = document.getElementById('startDate').value;
+            const end = document.getElementById('endDate').value;
+            const dependency = document.getElementById('dependency').value;
+
+            if (!name || !start || !end) {
+                alert('タスク名、開始日、終了日は必須です。');
+                return;
+            }
+            if (new Date(start) > new Date(end)) {
+                alert('終了日は開始日以降に設定してください。');
+                return;
+            }
+
+            const newId = 't_' + new Date().getTime(); // ユニークなIDを生成
+            const newTask = { id: newId, name, start, end };
+            if (dependency) {
+                newTask.dependsOn = dependency;
+            }
+
+            tasks.push(newTask);
+            saveTasks();
+            renderChart();
+            clearInputs();
+        }
+
+        function deleteTask(id) {
+            if(confirm('このタスクを削除しますか？\n※このタスクに依存している矢印も消えます。')) {
+                tasks = tasks.filter(t => t.id !== id);
+                // 削除されたタスクに依存していたタスクの依存関係をクリア
+                tasks.forEach(t => {
+                    if (t.dependsOn === id) {
+                        delete t.dependsOn;
+                    }
+                });
+                saveTasks();
+                renderChart();
+            }
+        }
+
+        function resetData() {
+            if(confirm('現在の変更をすべて破棄し、画像から読み取った初期データに戻しますか？')) {
+                tasks = JSON.parse(JSON.stringify(initialData)); // Deep copy
+                saveTasks();
+                renderChart();
+            }
+        }
+
+        function clearInputs() {
+            document.getElementById('taskName').value = '';
+            document.getElementById('startDate').value = '';
+            document.getElementById('endDate').value = '';
+            document.getElementById('dependency').value = '';
+        }
+
+        // 初期化処理
+        window.onload = function() {
+            updateDependencySelect();
+            renderChart();
+            // ウィンドウサイズ変更時に矢印を再描画
+            window.onresize = drawDependencies;
+        };
+    </script>
+</body>
+</html>
