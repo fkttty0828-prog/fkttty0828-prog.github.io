@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI生成ガントチャート</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            padding: 20px;
+        }
+        h2 {
+            text-align: center;
+            color: #2c3e50;
+        }
+        .controls {
+            background: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        input[type="text"], input[type="date"] {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .gantt-wrapper {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            overflow-x: auto;
+            padding: 15px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            min-width: 800px;
+        }
+        th, td {
+            border: 1px solid #e0e0e0;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: #ecf0f1;
+            font-size: 12px;
+            text-align: center;
+            min-width: 30px;
+        }
+        .task-name-col {
+            width: 200px;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .delete-btn {
+            background: #e74c3c;
+            padding: 4px 8px;
+            font-size: 10px;
+        }
+        .delete-btn:hover {
+            background: #c0392b;
+        }
+        .timeline-cell {
+            position: relative;
+            padding: 0 !important;
+            height: 40px;
+        }
+        .task-bar {
+            position: absolute;
+            top: 5px;
+            height: 30px;
+            background-color: #2ecc71;
+            border-radius: 4px;
+            color: white;
+            font-size: 12px;
+            line-height: 30px;
+            padding: 0 10px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            box-sizing: border-box;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .task-bar:hover {
+            background-color: #27ae60;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>マイ・ガントチャート</h2>
+
+    <div class="controls">
+        <input type="text" id="taskName" placeholder="タスク名を入力" required>
+        <input type="date" id="startDate" required>
+        <span>〜</span>
+        <input type="date" id="endDate" required>
+        <button onclick="addTask()">タスクを追加</button>
+        <button onclick="clearAllTasks()" style="background-color: #95a5a6;">全リセット</button>
+    </div>
+
+    <div class="gantt-wrapper" id="ganttContainer">
+        </div>
+
+    <script>
+        // ローカルストレージからデータを取得（なければ空配列）
+        let tasks = JSON.parse(localStorage.getItem('myGanttTasks')) || [];
+
+        function saveTasks() {
+            localStorage.setItem('myGanttTasks', JSON.stringify(tasks));
+        }
+
+        function renderChart() {
+            const container = document.getElementById('ganttContainer');
+            container.innerHTML = '';
+
+            if (tasks.length === 0) {
+                container.innerHTML = '<p style="text-align:center; color:#7f8c8d;">タスクがありません。上のフォームから追加してください。</p>';
+                return;
+            }
+
+            // 最小日付と最大日付を計算
+            let minDate = new Date(Math.min(...tasks.map(t => new Date(t.start))));
+            let maxDate = new Date(Math.max(...tasks.map(t => new Date(t.end))));
+            
+            // 前後に少し余白の日数を持たせる
+            minDate.setDate(minDate.getDate() - 2);
+            maxDate.setDate(maxDate.getDate() + 2);
+
+            // 総日数の計算
+            const totalDays = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24));
+
+            // テーブルの生成開始
+            let tableHTML = '<table><thead><tr><th class="task-name-col">タスク名</th>';
+            
+            // 日付ヘッダーの生成
+            for (let i = 0; i <= totalDays; i++) {
+                let d = new Date(minDate);
+                d.setDate(d.getDate() + i);
+                let dayStr = `${d.getMonth()+1}/${d.getDate()}`;
+                tableHTML += `<th>${dayStr}</th>`;
+            }
+            tableHTML += '</tr></thead><tbody>';
+
+            // 各タスクのバーを生成
+            tasks.forEach((task, index) => {
+                tableHTML += `<tr>
+                    <td>
+                        <div class="task-name-col">
+                            ${task.name} 
+                            <button class="delete-btn" onclick="deleteTask(${index})">削除</button>
+                        </div>
+                    </td>`;
+                
+                let taskStart = new Date(task.start);
+                let taskEnd = new Date(task.end);
+                
+                // バーを描画するためのセル（行全体を結合）
+                tableHTML += `<td colspan="${totalDays + 1}" class="timeline-cell">`;
+                
+                let startOffset = Math.floor((taskStart - minDate) / (1000 * 60 * 60 * 24));
+                let duration = Math.floor((taskEnd - taskStart) / (1000 * 60 * 60 * 24)) + 1;
+                
+                // 位置と幅をパーセントで計算
+                let leftPercent = (startOffset / (totalDays + 1)) * 100;
+                let widthPercent = (duration / (totalDays + 1)) * 100;
+
+                tableHTML += `
+                    <div class="task-bar" 
+                         style="left: ${leftPercent}%; width: ${widthPercent}%;" 
+                         title="期間: ${task.start} 〜 ${task.end}">
+                         ${task.name}
+                    </div>`;
+                
+                tableHTML += `</td></tr>`;
+            });
+
+            tableHTML += '</tbody></table>';
+            container.innerHTML = tableHTML;
+        }
+
+        function addTask() {
+            const name = document.getElementById('taskName').value;
+            const start = document.getElementById('startDate').value;
+            const end = document.getElementById('endDate').value;
+
+            if (!name || !start || !end) {
+                alert('すべての項目を入力してください！');
+                return;
+            }
+            if (new Date(start) > new Date(end)) {
+                alert('終了日は開始日以降に設定してください！');
+                return;
+            }
+
+            tasks.push({ name, start, end });
+            saveTasks();
+            renderChart();
+
+            // 入力欄をクリア
+            document.getElementById('taskName').value = '';
+            document.getElementById('startDate').value = '';
+            document.getElementById('endDate').value = '';
+        }
+
+        function deleteTask(index) {
+            if(confirm('このタスクを削除しますか？')) {
+                tasks.splice(index, 1);
+                saveTasks();
+                renderChart();
+            }
+        }
+
+        function clearAllTasks() {
+            if(confirm('すべてのタスクを削除してよろしいですか？')) {
+                tasks = [];
+                saveTasks();
+                renderChart();
+            }
+        }
+
+        // ページ読み込み時の初回描画
+        window.onload = renderChart;
+    </script>
+</body>
+</html>
