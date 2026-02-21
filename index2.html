@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>合同文化祭プロジェクト ガントチャート（階層化対応）</title>
+    <title>合同文化祭プロジェクト ガントチャート（編集機能付き）</title>
     <style>
         :root {
             --primary-color: #3498db;
             --secondary-color: #2c3e50;
             --accent-color: #e74c3c;
+            --edit-color: #f39c12;
             --bg-light: #f4f7f6;
             --text-dark: #333;
             --task-bar-bg: #2ecc71;
@@ -39,8 +40,10 @@
             transition: background 0.3s;
         }
         button:hover { background-color: #2980b9; }
-        .btn-reset { background-color: #95a5a6; }
-        .btn-reset:hover { background-color: #7f8c8d; }
+        .btn-update { background-color: var(--edit-color); }
+        .btn-update:hover { background-color: #d68910; }
+        .btn-reset, .btn-cancel { background-color: #95a5a6; }
+        .btn-reset:hover, .btn-cancel:hover { background-color: #7f8c8d; }
         
         .gantt-container-wrapper {
             position: relative; background: #fff; border-radius: 8px;
@@ -59,25 +62,22 @@
         td:first-child { position: sticky; left: 0; background-color: #fff; z-index: 5; border-right: 2px solid #ddd; }
         
         .task-name-cell {
-            width: 300px; min-width: 300px; display: flex; justify-content: space-between; align-items: center;
+            width: 350px; min-width: 350px; display: flex; justify-content: space-between; align-items: center;
         }
-        /* 親タスクと子タスクの文字スタイル */
         .parent-task-name { font-weight: bold; color: var(--secondary-color); }
-        .child-task-name { 
-            padding-left: 20px; color: #555; position: relative; font-size: 0.95em;
-        }
-        .child-task-name::before {
-            content: "└"; position: absolute; left: 5px; color: #aaa;
-        }
+        .child-task-name { padding-left: 20px; color: #555; position: relative; font-size: 0.95em; }
+        .child-task-name::before { content: "└"; position: absolute; left: 5px; color: #aaa; }
 
-        .delete-btn { background: var(--accent-color); padding: 4px 8px; font-size: 10px; margin-left: 10px; opacity: 0.6; }
-        .delete-btn:hover { background: #c0392b; opacity: 1; }
+        .action-btns { display: flex; gap: 5px; }
+        .small-btn { padding: 4px 8px; font-size: 10px; color: white; border: none; border-radius: 4px; cursor: pointer; opacity: 0.8; }
+        .small-btn:hover { opacity: 1; }
+        .edit-btn-small { background: var(--edit-color); }
+        .delete-btn-small { background: var(--accent-color); }
+
         .timeline-cell {
             position: relative; padding: 0 !important; height: 50px;
             background-image: linear-gradient(to right, transparent 95%, #f9f9f9 95%); background-size: 100% 100%;
         }
-        
-        /* タスクバーのスタイル */
         .task-bar {
             position: absolute; height: 26px; border-radius: 13px; color: white;
             font-size: 11px; line-height: 26px; padding: 0 12px; white-space: nowrap;
@@ -85,16 +85,14 @@
         }
         .child-bar { background-color: var(--task-bar-bg); box-shadow: 0 2px 4px rgba(0,0,0,0.15); }
         .child-bar:hover { background-color: var(--task-bar-hover); transform: translateY(-1px); }
-        .parent-bar { 
-            background-color: var(--parent-bar-bg); height: 10px; top: 20px; border-radius: 4px;
-        }
+        .parent-bar { background-color: var(--parent-bar-bg); height: 10px; top: 20px; border-radius: 4px; }
     </style>
 </head>
 <body>
 
     <h2>合同文化祭プロジェクト進捗管理</h2>
 
-    <div class="controls">
+    <div class="controls" id="formArea">
         <div class="control-group">
             <label for="taskName">タスク名</label>
             <input type="text" id="taskName" placeholder="例：デザイン作成" required>
@@ -108,19 +106,22 @@
             <input type="date" id="endDate" required>
         </div>
         <div class="control-group">
-            <label for="parentTask">属する親タスク（細分化用）</label>
+            <label for="parentTask">属する親タスク</label>
             <select id="parentTask">
-                <option value="">-- 親タスクにしない（独立タスク） --</option>
+                <option value="">-- 親にしない --</option>
             </select>
         </div>
         <div class="control-group">
-            <label for="dependency">先行タスク（任意）</label>
+            <label for="dependency">先行タスク</label>
             <select id="dependency">
                 <option value="">なし</option>
             </select>
         </div>
-        <button onclick="addTask()">タスクを追加</button>
-        <button onclick="resetData()" class="btn-reset">初期データに戻す</button>
+        
+        <button id="addBtn" onclick="addTask()">タスクを追加</button>
+        <button id="updateBtn" onclick="updateTask()" class="btn-update" style="display: none;">更新する</button>
+        <button id="cancelBtn" onclick="cancelEdit()" class="btn-cancel" style="display: none;">キャンセル</button>
+        <button onclick="resetData()" class="btn-reset" id="resetBtn">初期化</button>
     </div>
 
     <div class="gantt-container-wrapper">
@@ -135,52 +136,41 @@
     </div>
 
     <script>
-        // サンプルデータ（チラシ作成と準備期間を細分化）
         const initialData = [
             { id: 't1', name: 'チラシ作成（来場促進用）', start: '2024-05-01', end: '2024-05-31' },
             { id: 't1-1', name: 'デザイン案の作成', start: '2024-05-01', end: '2024-05-15', parentId: 't1' },
             { id: 't1-2', name: '印刷業者へ発注・納品', start: '2024-05-16', end: '2024-05-31', parentId: 't1', dependsOn: 't1-1' },
-            
             { id: 't2', name: '教育委員会後援申請（チラシ配布分）', start: '2024-05-15', end: '2024-05-31', dependsOn: 't1' },
             { id: 't3', name: '全小中学校へ配布（7月初）', start: '2024-07-01', end: '2024-07-10', dependsOn: 't2' },
-            
             { id: 't4', name: 'チラシ作成3月（出店募集分）', start: '2024-03-01', end: '2024-03-20' },
             { id: 't5', name: '教育委員会への後援申請 3月', start: '2024-03-21', end: '2024-03-31', dependsOn: 't4' },
-            { id: 't6', name: 'チラシ4月初配布（中学校4校）', start: '2024-04-01', end: '2024-04-10', dependsOn: 't5' },
-            { id: 't7', name: '4月末募集締切・選定（6チーム）', start: '2024-04-11', end: '2024-04-30', dependsOn: 't6' },
-            { id: 't8', name: '5月各チームと打ち合わせ', start: '2024-05-07', end: '2024-05-25', dependsOn: 't7' },
-            
-            // 準備作成期間を細分化
-            { id: 't9', name: '準備作成期間', start: '2024-05-26', end: '2024-07-24', dependsOn: 't8' },
+            { id: 't9', name: '準備作成期間', start: '2024-05-26', end: '2024-07-24' },
             { id: 't9-1', name: '会場レイアウト検討', start: '2024-05-26', end: '2024-06-15', parentId: 't9' },
-            { id: 't9-2', name: '機材・備品レンタル手配', start: '2024-06-16', end: '2024-06-30', parentId: 't9', dependsOn: 't9-1' },
-            { id: 't9-3', name: '当日のマニュアル作成', start: '2024-07-01', end: '2024-07-24', parentId: 't9' },
-
-            { id: 't11', name: '街づくり助成金提出', start: '2024-02-10', end: '2024-02-27' },
-            { id: 't12', name: '街づくり助成金発表', start: '2024-03-07', end: '2024-03-07', dependsOn: 't11' },
             { id: 't10', name: '【当日】合同文化祭', start: '2024-07-25', end: '2024-07-25', dependsOn: 't9' }
         ];
 
+        // データの保存キーは同じものを使うので、以前のデータが引き継がれます
         let tasks = JSON.parse(localStorage.getItem('ganttTasks_v3')) || initialData;
+        let editingTaskId = null; // 現在編集中のタスクIDを保持する変数
 
         function saveTasks() {
             localStorage.setItem('ganttTasks_v3', JSON.stringify(tasks));
             updateSelects();
         }
 
-        // プルダウンの更新（親タスク用と先行タスク用）
         function updateSelects() {
             const depSelect = document.getElementById('dependency');
             const parentSelect = document.getElementById('parentTask');
             
             depSelect.innerHTML = '<option value="">なし</option>';
-            parentSelect.innerHTML = '<option value="">-- 親タスクにしない（独立タスク） --</option>';
+            parentSelect.innerHTML = '<option value="">-- 親にしない --</option>';
             
-            // 親タスクとして選べるのは、他のタスクの子になっていないものだけにする
             const topLevelTasks = tasks.filter(t => !t.parentId);
 
             tasks.forEach(task => {
-                // 先行タスク用
+                // 自分自身を先行タスクや親タスクに選べないようにする（編集中のみ）
+                if (editingTaskId && task.id === editingTaskId) return;
+
                 const opt1 = document.createElement('option');
                 opt1.value = task.id;
                 opt1.textContent = task.name;
@@ -188,15 +178,24 @@
             });
 
             topLevelTasks.forEach(task => {
-                // 親タスク用
+                if (editingTaskId && task.id === editingTaskId) return;
+
                 const opt2 = document.createElement('option');
                 opt2.value = task.id;
                 opt2.textContent = task.name;
                 parentSelect.appendChild(opt2);
             });
+
+            // 編集中の場合、プルダウンを再構築した後に元の値を選択状態に戻す
+            if (editingTaskId) {
+                const task = tasks.find(t => t.id === editingTaskId);
+                if (task) {
+                    depSelect.value = task.dependsOn || '';
+                    parentSelect.value = task.parentId || '';
+                }
+            }
         }
 
-        // 親タスクの日付を子タスクに合わせて自動計算する処理
         function calculateParentDates() {
             const topLevelTasks = tasks.filter(t => !t.parentId);
             topLevelTasks.forEach(parent => {
@@ -204,7 +203,6 @@
                 if (children.length > 0) {
                     const minDate = new Date(Math.min(...children.map(c => new Date(c.start))));
                     const maxDate = new Date(Math.max(...children.map(c => new Date(c.end))));
-                    // YYYY-MM-DD 形式に戻す
                     parent.start = minDate.toISOString().split('T')[0];
                     parent.end = maxDate.toISOString().split('T')[0];
                     parent.isParent = true;
@@ -214,14 +212,12 @@
             });
         }
 
-        // 表示順序を「親 → 子」の順番に並び替える
         function getSortedTasks() {
             let sorted = [];
             const topLevelTasks = tasks.filter(t => !t.parentId);
             topLevelTasks.forEach(parent => {
                 sorted.push(parent);
                 const children = tasks.filter(t => t.parentId === parent.id);
-                // 子タスクは開始日順に並べる
                 children.sort((a, b) => new Date(a.start) - new Date(b.start));
                 sorted.push(...children);
             });
@@ -229,7 +225,7 @@
         }
 
         function renderChart() {
-            calculateParentDates(); // 描画前に親の日付を調整
+            calculateParentDates();
             const displayTasks = getSortedTasks();
 
             const container = document.getElementById('ganttTableContainer');
@@ -253,7 +249,7 @@
             const totalDays = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24)) + 1;
             const dayWidthPercent = 100 / totalDays;
 
-            let tableHTML = '<table><thead><tr><th style="width: 300px;">タスク名</th>';
+            let tableHTML = '<table><thead><tr><th style="width: 350px;">タスク名</th>';
             let currentDate = new Date(minDate);
             for (let i = 0; i < totalDays; i++) {
                 let dateStr = `${currentDate.getMonth()+1}/${currentDate.getDate()}`;
@@ -267,11 +263,18 @@
                 const isChild = !!task.parentId;
                 const nameClass = isChild ? 'child-task-name' : 'parent-task-name';
                 const barClass = task.isParent ? 'parent-bar' : 'child-bar';
+                const barText = task.isParent ? '' : task.name;
 
-                tableHTML += `<tr id="task-row-${task.id}">
+                // 編集中の行は背景色を少し変えてわかりやすくする
+                const rowStyle = (editingTaskId === task.id) ? 'background-color: #fff9e6;' : '';
+
+                tableHTML += `<tr id="task-row-${task.id}" style="${rowStyle}">
                     <td class="task-name-cell">
                         <span class="${nameClass}">${task.name}</span>
-                        <button class="delete-btn" onclick="deleteTask('${task.id}')">削除</button>
+                        <div class="action-btns">
+                            <button class="small-btn edit-btn-small" onclick="editTask('${task.id}')">編集</button>
+                            <button class="small-btn delete-btn-small" onclick="deleteTask('${task.id}')">削除</button>
+                        </div>
                     </td>`;
                 
                 tableHTML += `<td colspan="${totalDays}" class="timeline-cell">`;
@@ -283,9 +286,6 @@
                 
                 let leftPercent = startOffsetDays * dayWidthPercent;
                 let widthPercent = durationDays * dayWidthPercent;
-
-                // 親タスクの場合はバーの文字を表示しない（細いバーにするため）
-                const barText = task.isParent ? '' : task.name;
 
                 tableHTML += `
                     <div class="task-bar ${barClass}" id="bar-${task.id}"
@@ -340,14 +340,8 @@
             const dependency = document.getElementById('dependency').value;
             const parentId = document.getElementById('parentTask').value;
 
-            if (!name || !start || !end) {
-                alert('タスク名、開始日、終了日は必須です。');
-                return;
-            }
-            if (new Date(start) > new Date(end)) {
-                alert('終了日は開始日以降に設定してください。');
-                return;
-            }
+            if (!name || !start || !end) { alert('タスク名、開始日、終了日は必須です。'); return; }
+            if (new Date(start) > new Date(end)) { alert('終了日は開始日以降に設定してください。'); return; }
 
             const newId = 't_' + new Date().getTime();
             const newTask = { id: newId, name, start, end };
@@ -360,15 +354,79 @@
             clearInputs();
         }
 
-        function deleteTask(id) {
-            if(confirm('このタスクを削除しますか？\n※親タスクを削除すると、紐づく子タスクも一緒に削除されます。')) {
-                // 自分自身と、自分を親に持つ子タスクを削除
-                tasks = tasks.filter(t => t.id !== id && t.parentId !== id);
+        // --- 編集機能の追加 ---
+        function editTask(id) {
+            const task = tasks.find(t => t.id === id);
+            if (!task) return;
+            
+            editingTaskId = id;
+            updateSelects(); // プルダウンから自分自身を除外するため再構築
+            
+            // フォームに値をセット
+            document.getElementById('taskName').value = task.name;
+            document.getElementById('startDate').value = task.start;
+            document.getElementById('endDate').value = task.end;
+            document.getElementById('parentTask').value = task.parentId || '';
+            document.getElementById('dependency').value = task.dependsOn || '';
+            
+            // ボタンの表示切り替え
+            document.getElementById('addBtn').style.display = 'none';
+            document.getElementById('resetBtn').style.display = 'none';
+            document.getElementById('updateBtn').style.display = 'inline-block';
+            document.getElementById('cancelBtn').style.display = 'inline-block';
+            
+            // 画面を上部（入力フォーム）へスクロール
+            document.getElementById('formArea').scrollIntoView({ behavior: 'smooth' });
+            renderChart(); // 行のハイライトを更新
+        }
+
+        function updateTask() {
+            if (!editingTaskId) return;
+            
+            const name = document.getElementById('taskName').value;
+            const start = document.getElementById('startDate').value;
+            const end = document.getElementById('endDate').value;
+            const dependency = document.getElementById('dependency').value;
+            const parentId = document.getElementById('parentTask').value;
+
+            if (!name || !start || !end) { alert('タスク名、開始日、終了日は必須です。'); return; }
+            if (new Date(start) > new Date(end)) { alert('終了日は開始日以降に設定してください。'); return; }
+
+            const taskIndex = tasks.findIndex(t => t.id === editingTaskId);
+            if (taskIndex !== -1) {
+                tasks[taskIndex].name = name;
+                tasks[taskIndex].start = start;
+                tasks[taskIndex].end = end;
                 
-                // 依存関係のクリア
-                tasks.forEach(t => {
-                    if (t.dependsOn === id) delete t.dependsOn;
-                });
+                if (dependency) tasks[taskIndex].dependsOn = dependency;
+                else delete tasks[taskIndex].dependsOn;
+                
+                if (parentId) tasks[taskIndex].parentId = parentId;
+                else delete tasks[taskIndex].parentId;
+            }
+
+            cancelEdit(); // 保存して通常モードに戻す
+        }
+
+        function cancelEdit() {
+            editingTaskId = null;
+            clearInputs();
+            document.getElementById('addBtn').style.display = 'inline-block';
+            document.getElementById('resetBtn').style.display = 'inline-block';
+            document.getElementById('updateBtn').style.display = 'none';
+            document.getElementById('cancelBtn').style.display = 'none';
+            
+            saveTasks();
+            renderChart();
+        }
+        // ----------------------
+
+        function deleteTask(id) {
+            if(confirm('このタスクを削除しますか？\n※親を削除すると子も消えます。')) {
+                tasks = tasks.filter(t => t.id !== id && t.parentId !== id);
+                tasks.forEach(t => { if (t.dependsOn === id) delete t.dependsOn; });
+                
+                if (editingTaskId === id) cancelEdit(); // 編集中のものを消した場合はキャンセル
                 
                 saveTasks();
                 renderChart();
