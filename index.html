@@ -16,7 +16,7 @@
             --task-bar-bg: #2ecc71;
             --task-bar-hover: #27ae60;
             --parent-bar-bg: #34495e;
-            --today-color: #ff9ff3; /* 今日のハイライト色 */
+            --today-color: #ff9ff3;
         }
         body { font-family: 'Helvetica Neue', Arial, sans-serif; background-color: var(--bg-light); color: var(--text-dark); padding: 20px; margin: 0; }
         h2 { text-align: center; color: var(--secondary-color); margin-bottom: 20px; }
@@ -33,18 +33,31 @@
         .btn-export { background-color: #8e44ad; }
         .btn-export:hover { background-color: #732d91; }
         
-        /* ツールバー追加 */
         .toolbar { display: flex; justify-content: space-between; margin-bottom: 10px; }
         .btn-today { background-color: #16a085; padding: 6px 12px; font-size: 13px;}
         .btn-today:hover { background-color: #117a65; }
 
-        .gantt-container-wrapper { position: relative; background: #fff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); padding: 20px; overflow-x: auto; }
-        #dependency-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+        /* ▼▼ 変更箇所：スクロールコンテナの仕様変更 ▼▼ */
+        .gantt-container-wrapper { 
+            position: relative; 
+            background: #fff; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05); 
+            padding: 0; /* ヘッダーを隙間なく固定するために0に変更 */
+            border: 1px solid #ddd; /* パディングを消した分、外側に枠線を追加 */
+            overflow-x: auto; 
+            overflow-y: auto; /* 縦スクロールを追加 */
+            max-height: 65vh; /* 画面の高さの65%でスクロールするように制限 */
+        }
+        
+        #dependency-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; overflow: visible;}
         .dependency-arrow { stroke: #bdc3c7; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
 
         table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 1200px; }
         th, td { border-bottom: 1px solid #eee; border-right: 1px solid #eee; padding: 12px; text-align: left; }
-        th { background-color: #f8f9fa; font-size: 13px; text-align: center; font-weight: 600; color: var(--secondary-color); position: sticky; top: 0; z-index: 20; }
+        
+        /* ▼▼ 変更箇所：ヘッダーの下に影を付けてスクロール境界をわかりやすく ▼▼ */
+        th { background-color: #f8f9fa; font-size: 13px; text-align: center; font-weight: 600; color: var(--secondary-color); position: sticky; top: 0; z-index: 20; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
         th:first-child { left: 0; z-index: 21; background-color: #f8f9fa; border-right: 2px solid #ddd; }
         td:first-child { position: sticky; left: 0; background-color: #fff; z-index: 5; border-right: 2px solid #ddd; }
         
@@ -62,7 +75,6 @@
 
         .timeline-cell { position: relative; padding: 0 !important; height: 50px; background-image: linear-gradient(to right, transparent 95%, #f9f9f9 95%); background-size: 100% 100%; }
         
-        /* 今日のハイライト線 */
         .today-line { position: absolute; top: 0; bottom: 0; border-left: 2px dashed var(--today-color); z-index: 3; pointer-events: none;}
         .today-header { background-color: #ffeaa7 !important; color: #d35400 !important; font-weight: bold; }
 
@@ -71,7 +83,6 @@
         .child-bar:hover { background-color: var(--task-bar-hover); transform: translateY(-1px); }
         .parent-bar { background-color: var(--parent-bar-bg); height: 10px; top: 20px; border-radius: 4px; }
 
-        /* モーダル（データ出力画面）のスタイル */
         #exportModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100; justify-content: center; align-items: center; }
         .modal-content { background: #fff; padding: 20px; border-radius: 8px; width: 80%; max-width: 600px; }
         .modal-content textarea { width: 100%; height: 300px; font-family: monospace; font-size: 12px; margin-bottom: 10px; padding: 10px; box-sizing: border-box; }
@@ -133,7 +144,6 @@
     </div>
 
     <script>
-        // ▼▼▼ ソースコードを更新する時は、ここの配列（[ ]の中身）を上書きします ▼▼▼
         const initialData = [
     {
         "id": "t1",
@@ -248,26 +258,21 @@
         "parentId": "t_1771736274664"
     }
 ];
-        // ▲▲▲---------------------------------------------------------▲▲▲
 
         let tasks = JSON.parse(localStorage.getItem('ganttTasks_v4')) || initialData;
         let editingTaskId = null;
-        let dayWidthPercentGlobal = 0; // スクロール計算用
+        let dayWidthPercentGlobal = 0;
 
         function saveTasks() {
             localStorage.setItem('ganttTasks_v4', JSON.stringify(tasks));
             updateSelects();
         }
 
-        // --- データ出力機能 ---
         function showExportData() {
             const modal = document.getElementById('exportModal');
             const textarea = document.getElementById('exportTextarea');
-            
-            // 現在のタスク配列を、JavaScriptのコード形式に変換する
             const jsonString = JSON.stringify(tasks, null, 4);
             textarea.value = `const initialData = ${jsonString};`;
-            
             modal.style.display = 'flex';
         }
 
@@ -281,7 +286,6 @@
             document.execCommand('copy');
             alert('コピーしました！HTMLファイルの initialData の部分に上書きペーストしてください。');
         }
-        // ----------------------
 
         function updateSelects() {
             const depSelect = document.getElementById('dependency');
@@ -377,11 +381,9 @@
                 return;
             }
 
-            // 「今日」の日付を取得
             const today = new Date();
             today.setHours(0,0,0,0);
 
-            // カレンダーの開始・終了を決定（タスクの最小/最大、もしくは今日を含める）
             let minDate = new Date(Math.min(...displayTasks.map(t => new Date(t.start))));
             let maxDate = new Date(Math.max(...displayTasks.map(t => new Date(t.end))));
             
@@ -393,17 +395,16 @@
 
             const totalDays = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24)) + 1;
             const dayWidthPercent = 100 / totalDays;
-            dayWidthPercentGlobal = dayWidthPercent; // スクロール用に保存
+            dayWidthPercentGlobal = dayWidthPercent; 
 
             let tableHTML = '<table><thead><tr><th style="width: 350px;">タスク名</th>';
             let currentDate = new Date(minDate);
-            let todayColumnIndex = -1; // 今日の列がどこか記録
+            let todayColumnIndex = -1; 
 
             for (let i = 0; i < totalDays; i++) {
                 let dateStr = `${currentDate.getMonth()+1}/${currentDate.getDate()}`;
                 let cellClass = '';
                 
-                // 今日かどうか判定
                 if (currentDate.getTime() === today.getTime()) {
                     cellClass = 'today-header';
                     todayColumnIndex = i;
@@ -435,7 +436,6 @@
                 
                 tableHTML += `<td colspan="${totalDays}" class="timeline-cell">`;
                 
-                // 今日のハイライト線を引く
                 if (todayColumnIndex !== -1) {
                     let todayLeft = todayColumnIndex * dayWidthPercent;
                     tableHTML += `<div class="today-line" style="left: ${todayLeft}%;"></div>`;
@@ -463,14 +463,23 @@
 
             setTimeout(() => {
                 drawDependencies();
-                if (autoScroll) scrollToToday(); // 初回読み込み時は今日へスクロール
+                if (autoScroll) scrollToToday(); 
             }, 100);
         }
 
+        // ▼▼ 変更箇所：スクロールに応じた座標計算を追加 ▼▼
         function drawDependencies() {
             const svgContainer = document.getElementById('dependency-svg');
-            const containerRect = document.querySelector('.gantt-container-wrapper').getBoundingClientRect();
+            const wrapper = document.querySelector('.gantt-container-wrapper');
+            const containerRect = wrapper.getBoundingClientRect();
             
+            // SVGのキャンバスサイズをスクロール領域全体に合わせる
+            svgContainer.style.width = wrapper.scrollWidth + 'px';
+            svgContainer.style.height = wrapper.scrollHeight + 'px';
+
+            const scrollTop = wrapper.scrollTop;
+            const scrollLeft = wrapper.scrollLeft;
+
             tasks.forEach(task => {
                 if (task.dependsOn) {
                     const fromBar = document.getElementById(`bar-${task.dependsOn}`);
@@ -478,10 +487,13 @@
                     if (fromBar && toBar) {
                         const fromRect = fromBar.getBoundingClientRect();
                         const toRect = toBar.getBoundingClientRect();
-                        const startX = fromRect.right - containerRect.left + 2;
-                        const startY = fromRect.top - containerRect.top + fromRect.height / 2;
-                        const endX = toRect.left - containerRect.left - 2;
-                        const endY = toRect.top - containerRect.top + toRect.height / 2;
+                        
+                        // 画面上の絶対位置から、スクロール量を足してキャンバス内の座標に変換
+                        const startX = fromRect.right - containerRect.left + 2 + scrollLeft;
+                        const startY = fromRect.top - containerRect.top + fromRect.height / 2 + scrollTop;
+                        const endX = toRect.left - containerRect.left - 2 + scrollLeft;
+                        const endY = toRect.top - containerRect.top + toRect.height / 2 + scrollTop;
+                        
                         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
                         const controlPointX1 = startX + 20;
                         const controlPointX2 = endX - 20;
@@ -494,20 +506,21 @@
             });
         }
 
-        // --- スクロール機能 ---
+        // ▼▼ スクロール連動：矢印がズレないようにスクロール中も再描画する処理を追加 ▼▼
+        document.getElementById('scrollArea').addEventListener('scroll', function() {
+            // スクロール時の微調整（SVGはabsoluteで追従するため基本は不要ですが、念のため）
+        });
+
         function scrollToToday() {
             const scrollArea = document.getElementById('scrollArea');
             const todayHeader = document.querySelector('.today-header');
             
             if (todayHeader) {
-                // 「今日」のセルが画面の真ん中あたりに来るようにスクロール位置を計算
                 const offsetLeft = todayHeader.offsetLeft;
                 const areaWidth = scrollArea.clientWidth;
-                // 左側のタスク名固定カラム(約350px)を考慮してスクロール
                 scrollArea.scrollTo({ left: offsetLeft - 350 - (areaWidth/3), behavior: 'smooth' });
             }
         }
-        // ----------------------
 
         function addTask() {
             const name = document.getElementById('taskName').value;
@@ -584,7 +597,6 @@
 
         function resetData() {
             if(confirm('初期データに戻しますか？')) {
-                // ローカルストレージをクリアしてリロード
                 localStorage.removeItem('ganttTasks_v4');
                 location.reload();
             }
@@ -596,7 +608,7 @@
 
         window.onload = function() {
             updateSelects();
-            renderChart(true); // true を渡して初回読み込み時に今日へスクロール
+            renderChart(true); 
             window.onresize = drawDependencies;
         };
     </script>
